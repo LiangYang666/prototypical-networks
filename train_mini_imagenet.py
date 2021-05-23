@@ -254,7 +254,6 @@ def main_worker(gpu, ngpus_per_node, args):
         return
 
     for epoch in range(args.start_epoch, args.epochs):
-        lr_scheduler.step()
         if args.distributed:
             train_sampler.set_epoch(epoch)
 
@@ -294,6 +293,8 @@ def main_worker(gpu, ngpus_per_node, args):
                     'best_acc1': best_acc1,
                     'optimizer': optimizer.state_dict(),
                 }, is_best, results_dir)
+
+        lr_scheduler.step()
 
 
 def train(train_loader, model, optimizer, epoch, args):
