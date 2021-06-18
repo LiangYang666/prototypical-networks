@@ -14,6 +14,7 @@ import time
 import random
 import argparse
 import os
+import ipdb
 
 
 from models.convnet_mini import ConvNet
@@ -162,6 +163,8 @@ def main_worker(gpu, ngpus_per_node, args):
                                 world_size=args.world_size, rank=args.rank)
     # Create model
     if args.arch == 'default_convnet':
+        model = ConvNet()
+    elif args.arch == 'resnet':
         model = ConvNet()
     else:
         if args.pretrained:
@@ -315,8 +318,23 @@ def train(train_loader, model, optimizer, epoch, args):
     for n_episode, batch in enumerate(train_loader, 1):
         data_time.update(time.time() - end)
         data, _ = [_.cuda(non_blocking=True) for _ in batch]
+        # ipdb.set_trace()
+        '''while  n_way=30 support=1 query=15
+            batch.__len__() -> 2
+            batch[0].shape -> torch.Size([480, 3, 84, 84])
+            batch[1].shape -> torch.Size([480])
+            data.__len__() -> 480
+            data[0].shape -> torch.Size([3, 84, 84])
+        '''
         p = args.n_support * args.n_way_train
         data_support, data_query = data[:p], data[p:]
+        '''while  n_way=30 support=1 query=15
+        
+            data_support.shape -> torch.Size([30, 3, 84, 84])  30 different classes images
+            data_query.shape -> torch.Size([450, 3, 84, 84])
+        
+        '''
+
 
         # Compute class prototypes (n_way, output_dim)
         if n_episode > 1 and args.alpha > 0.0:
@@ -324,15 +342,28 @@ def train(train_loader, model, optimizer, epoch, args):
                 model(data_support).reshape(args.n_support, args.n_way_train, -1).mean(dim=0)
         else:
             class_prototypes = model(data_support).reshape(args.n_support, args.n_way_train, -1).mean(dim=0)
+            '''while  n_way=30 support=1 query=15
+                    model(data_support).reshape(args.n_support, args.n_way_train, -1).shape -> torch.Size([1, 30, 1600])
+                    class_prototypes.shape -> torch.Size([30, 1600])
+            '''
 
+        # ipdb.set_trace()
         # Generate labels (n_way, n_query)
         labels = torch.arange(args.n_way_train).repeat(args.n_query_train)
-        labels = labels.type(torch.cuda.LongTensor)
+        # labels.shape -> torch.size([450])     (0~29) then repeat 15 times
+        labels = labels.type(torch.cuda.LongTensor)     # move to cuda
 
         # Compute loss and metrics
         logits = euclidean_dist(model(data_query), class_prototypes)
         loss = F.cross_entropy(logits, labels)
         acc = compute_accuracy(logits, labels)
+        '''while  n_way=30 support=1 query=15
+                model(data_query).shape -> torch.Size([450, 1600])
+                class_prototypes.shape -> torch.Size([30, 1600])
+                logits.shape -> torch.Size([450, 30])
+                loss -> tensor(486.1973, device='cuda:0', grad_fn=<NllLossBackward>)
+                acc -> 0.06888888776302338
+        '''
 
         # Record loss and accuracy
         losses.update(loss.item(), data_query.size(0))

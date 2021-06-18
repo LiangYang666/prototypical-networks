@@ -1,6 +1,8 @@
 import torch
 import numpy as np
 import torch.utils.data as data
+import ipdb
+
 
 
 class EpisodicBatchSampler(data.Sampler):
@@ -41,5 +43,9 @@ class EpisodicBatchSampler(data.Sampler):
                 l = self.samples_indices[c]
                 pos = torch.randperm(len(l))[:self.n_samples]
                 batch.append(l[pos])
+            # torch.stack(batch).shape -> torch.Size([30, 16]) n_way=30(classes number)  n_samples = n_query+n_support = 15+1
+            # ipdb.set_trace()
+            # torch.stack(batch).t().shape -> torch.Size([16, 30])
             batch = torch.stack(batch).t().reshape(-1)
+            # batch.shape -> torch.Size([480])
             yield batch

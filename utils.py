@@ -2,6 +2,7 @@ import os
 import torch
 import shutil
 from torch.nn import init
+import ipdb
 
 
 class AverageMeter(object):
@@ -58,11 +59,26 @@ def mkdir(path):
 
 
 def euclidean_dist(a, b):
+    # ipdb.set_trace()
     n = a.shape[0]
     m = b.shape[0]
-    a = a.unsqueeze(1).expand(n, m, -1)
+
+    '''while  n_way=30 support=1 query=15
+            m -> 30
+            n -> 450
+            !a.shape -> torch.Size([450, 1600])
+            !b.shape -> torch.Size([30, 1600])
+    '''
+    a = a.unsqueeze(1).expand(n, m, -1) # It just create a new view on existing tensor, not copy tensor
     b = b.unsqueeze(0).expand(n, m, -1)
+
+    '''while  n_way=30 support=1 query=15
+            !a.shape -> torch.Size([450, 30, 1600])
+            !b.shape -> torch.Size([450, 30, 1600])
+            logits.shape -> torch.Size([450, 30])
+    '''
     logits = -((a - b)**2).sum(dim=2)
+
     return logits
 
 
