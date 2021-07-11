@@ -3,6 +3,7 @@ import torch
 import shutil
 from torch.nn import init
 import ipdb
+import numpy as np
 
 
 class AverageMeter(object):
@@ -79,6 +80,21 @@ def euclidean_dist(a, b):
     '''
     logits = -((a - b)**2).sum(dim=2)
 
+    return logits
+
+def cosine_dist(x, y):
+    """
+    :param x: m x k array
+    :param y: n x k array
+    :return: m x n array
+    """
+    xx = torch.sum(x ** 2, dim=1) ** 0.5
+    # ipdb.set_trace()
+    x = x / xx.unsqueeze(1)
+    yy = torch.sum(y ** 2, dim=1) ** 0.5
+    y = y / yy.unsqueeze(1)
+    # dist = 1 - torch.mm(x, y.t())
+    logits = torch.mm(x, y.t())*100
     return logits
 
 

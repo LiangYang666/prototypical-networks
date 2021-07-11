@@ -1,0 +1,5 @@
+*.tar
+*.pt
+*.pth
+
+models_trained/*

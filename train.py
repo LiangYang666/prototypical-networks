@@ -19,7 +19,7 @@ import os
 
 
 from models.identity import Identity
-from utils import AverageMeter, save_checkpoint, compute_accuracy, weights_init_xavier, mkdir, euclidean_dist
+from utils import AverageMeter, save_checkpoint, compute_accuracy, weights_init_xavier, mkdir, euclidean_dist, cosine_dist
 from samplers.episodic_batch_sampler import EpisodicBatchSampler
 from dataloaders.few_shot import ImageFolderFewShot
 from torch.utils.data import DataLoader
@@ -99,13 +99,17 @@ parser.add_argument('--alpha', default=0.0, type=float, help='Controls the contr
 parser.add_argument('--out_dim', default=None, type=int, help='Output embedding dimension')
 
 best_acc1 = 0
+dist_measure = cosine_dist  # euclidean_dist
 
 
 def main():
     args = parser.parse_args()
     global results_dir
-    results_dir = os.path.join('models_trained', args.model_name)
+    results_dir = os.path.join('../../data/cssjj/rundata/metalearning/models_trained', args.model_name)
     mkdir(results_dir)
+    global ckpt_dir
+    ckpt_dir = os.path.join(results_dir, 'checkpoints')
+    mkdir(ckpt_dir)
 
     options = vars(args)
     save_options_dir = os.path.join(results_dir, 'options.txt')
@@ -181,6 +185,19 @@ def main_worker(gpu, ngpus_per_node, args):
         model.fc = Identity()
 
     print('Number of parameters: ', sum([p.numel() for p in model.parameters()]))
+    # optionally resume from a checkpoint
+    if args.resume:
+        if os.path.isfile(args.resume):
+            print("=> loading checkpoint '{}'".format(args.resume))
+            checkpoint = torch.load(args.resume)
+            args.start_epoch = checkpoint['epoch']
+            best_acc1 = checkpoint['best_acc1']
+            model.load_state_dict(checkpoint['state_dict'])
+            print("=> loaded checkpoint '{}' (epoch {})"
+                  .format(args.resume, checkpoint['epoch']))
+        else:
+            print("=> no checkpoint found at '{}'".format(args.resume))
+
 
     if args.distributed:
         # For multiprocessing distributed, DistributedDataParallel constructor
@@ -210,7 +227,6 @@ def main_worker(gpu, ngpus_per_node, args):
             model.cuda()
         else:
             model = torch.nn.DataParallel(model).cuda()
-
     # Define optimizer
     if args.optimizer == 'sgd':
         optimizer = torch.optim.SGD(model.parameters(), args.lr,
@@ -228,7 +244,7 @@ def main_worker(gpu, ngpus_per_node, args):
             checkpoint = torch.load(args.resume)
             args.start_epoch = checkpoint['epoch']
             best_acc1 = checkpoint['best_acc1']
-            model.load_state_dict(checkpoint['state_dict'])
+            # model.load_state_dict(checkpoint['state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer'])
             print("=> loaded checkpoint '{}' (epoch {})"
                   .format(args.resume, checkpoint['epoch']))
@@ -259,7 +275,7 @@ def main_worker(gpu, ngpus_per_node, args):
         transforms.Compose([
             transforms.Resize((args.image_size, args.image_size)),
             # transforms.RandomHorizontalFlip(),
-            # transforms.RandomRotation(degrees=180),
+            transforms.RandomRotation(degrees=360),
             transforms.ToTensor(),
             normalize,
         ]))
@@ -285,46 +301,49 @@ def main_worker(gpu, ngpus_per_node, args):
         return
 
     for epoch in range(args.start_epoch, args.epochs):
-        lr_scheduler.step()
         if args.distributed:
             train_sampler.set_epoch(epoch)
 
         # train for one epoch
         loss_t, acc_t = train(train_loader, model, optimizer, epoch, args)
 
+        lr_scheduler.step()
+
         # evaluate on validation set
-        loss_val, acc1 = validate(val_loader, model, args)
+        if epoch%5 == 0:
+            loss_val, acc1 = validate(val_loader, model, args)
 
-        dict_metrics = {'loss_training': loss_t, 'loss_validation': loss_val,
-                        'acc_training': acc_t, 'acc_validation': acc1}
 
-        for key in dict_metrics:
-            with open(os.path.join(results_dir, key + '.txt'), "a+") as myfile:
-                myfile.write(str(dict_metrics[key]) + '\n')
+            dict_metrics = {'loss_training': loss_t, 'loss_validation': loss_val,
+                            'acc_training': acc_t, 'acc_validation': acc1}
 
-        # remember best acc@1 and save checkpoint
-        is_best = acc1 > best_acc1
-        best_acc1 = max(acc1, best_acc1)
+            for key in dict_metrics:
+                with open(os.path.join(results_dir, key + '.txt'), "a+") as myfile:
+                    myfile.write(str(dict_metrics[key]) + f'  ep{epoch}\n')
 
-        if not args.multiprocessing_distributed or (args.multiprocessing_distributed
-                                                    and args.rank % ngpus_per_node == 0):
-            print('Saving model...')
-            if args.gpu is None:
-                save_checkpoint({
-                    'epoch': epoch + 1,
-                    'arch': args.arch,
-                    'state_dict': model.module.state_dict(),
-                    'best_acc1': best_acc1,
-                    'optimizer': optimizer.state_dict(),
-                }, is_best, results_dir)
-            else:
-                save_checkpoint({
-                    'epoch': epoch + 1,
-                    'arch': args.arch,
-                    'state_dict': model.state_dict(),
-                    'best_acc1': best_acc1,
-                    'optimizer': optimizer.state_dict(),
-                }, is_best, results_dir)
+            # remember best acc@1 and save checkpoint
+            is_best = acc1 > best_acc1
+            best_acc1 = max(acc1, best_acc1)
+
+            if not args.multiprocessing_distributed or (args.multiprocessing_distributed
+                                                        and args.rank % ngpus_per_node == 0):
+                print('Saving model...')
+                if args.gpu is None:
+                    save_checkpoint({
+                        'epoch': epoch + 1,
+                        'arch': args.arch,
+                        'state_dict': model.module.state_dict(),
+                        'best_acc1': best_acc1,
+                        'optimizer': optimizer.state_dict(),
+                    }, is_best, ckpt_dir, filename=f'checkpoint_{epoch}.pt')
+                else:
+                    save_checkpoint({
+                        'epoch': epoch + 1,
+                        'arch': args.arch,
+                        'state_dict': model.state_dict(),
+                        'best_acc1': best_acc1,
+                        'optimizer': optimizer.state_dict(),
+                    }, is_best, ckpt_dir, filename=f'checkpoint_{epoch}.pt')
 
 
 def train(train_loader, model, optimizer, epoch, args):
@@ -359,7 +378,7 @@ def train(train_loader, model, optimizer, epoch, args):
         labels = labels.type(torch.cuda.LongTensor)
 
         # Compute loss and metrics
-        logits = euclidean_dist(model(data_query), class_prototypes)
+        logits = dist_measure(model(data_query), class_prototypes)
         loss = F.cross_entropy(logits, labels)
         acc = compute_accuracy(logits, labels)
 
@@ -420,7 +439,7 @@ def validate(val_loader, model, args):
             labels = labels.type(torch.cuda.LongTensor)
 
             # Compute loss and metrics
-            logits = euclidean_dist(model(data_query), class_prototypes)
+            logits = dist_measure(model(data_query), class_prototypes)
             loss = F.cross_entropy(logits, labels)
             acc = compute_accuracy(logits, labels)
 

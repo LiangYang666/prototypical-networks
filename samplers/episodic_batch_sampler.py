@@ -1,3 +1,5 @@
+import random
+
 import torch
 import numpy as np
 import torch.utils.data as data
@@ -41,6 +43,8 @@ class EpisodicBatchSampler(data.Sampler):
             classes = torch.randperm(len(self.samples_indices))[:self.n_way]
             for c in classes:
                 l = self.samples_indices[c]
+                while len(l) < self.n_samples:
+                    l = self.samples_indices[random.randint(0, len(self.samples_indices)-1)]
                 pos = torch.randperm(len(l))[:self.n_samples]
                 batch.append(l[pos])
             # torch.stack(batch).shape -> torch.Size([30, 16]) n_way=30(classes number)  n_samples = n_query+n_support = 15+1

@@ -13,7 +13,7 @@ import torchvision
 from torch.autograd import Variable
 
 
-def resnet18_embedding():
+def resnet18_2embedding():
     model = torchvision.models.resnet18(pretrained=True)
 
     def _forward_impl(self, x):
@@ -43,7 +43,7 @@ if __name__ =="__main__":
     input = torch.randn(3, 1, 608, 608) # input.is_leaf -> True,input.requires_grad -> False
 
     # torchvision.models.resnext50_32x4d()
-    model = resnet18_embedding()
+    model = resnet18_2embedding()
     # model.conv1 = nn.Conv2d(1, model.conv1.out_channels, kernel_size=7, stride=2, padding=3,
     #                            bias=False)
     # model.fc = nn.Linear(model.fc.in_features, 2)

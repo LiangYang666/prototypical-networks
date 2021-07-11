@@ -18,6 +18,7 @@ import ipdb
 
 
 from models.convnet_mini import ConvNet
+from models.resnet import resnet18_2embedding
 from models.identity import Identity
 from utils import AverageMeter, save_checkpoint, compute_accuracy, weights_init_xavier, mkdir, euclidean_dist
 from samplers.episodic_batch_sampler import EpisodicBatchSampler
@@ -165,7 +166,7 @@ def main_worker(gpu, ngpus_per_node, args):
     if args.arch == 'default_convnet':
         model = ConvNet()
     elif args.arch == 'resnet':
-        model = ConvNet()
+        model = resnet18_2embedding()
     else:
         if args.pretrained:
             print("=> using pre-trained model '{}'".format(args.arch))
